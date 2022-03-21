@@ -2,9 +2,7 @@ package fakedatastore
 
 import (
 	"context"
-	"fmt"
 	"sort"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -15,12 +13,8 @@ import (
 	"github.com/spiffe/spire-api-sdk/proto/spire/api/types"
 	"github.com/spiffe/spire/pkg/common/util"
 	"github.com/spiffe/spire/pkg/server/datastore"
-	sql "github.com/spiffe/spire/pkg/server/datastore/sqlstore"
+	"github.com/spiffe/spire/pkg/server/datastore/core"
 	"github.com/spiffe/spire/proto/spire/common"
-)
-
-var (
-	nextID uint32
 )
 
 type DataStore struct {
@@ -33,12 +27,10 @@ var _ datastore.DataStore = (*DataStore)(nil)
 func New(tb testing.TB) *DataStore {
 	log, _ := test.NewNullLogger()
 
-	ds := sql.New(log)
-
-	err := ds.Configure(fmt.Sprintf(`
-		database_type = "sqlite3"
-		connection_string = "file:memdb%d?mode=memory&cache=shared"
-	`, atomic.AddUint32(&nextID, 1)))
+	ds, err := core.New(context.Background(), core.Config{
+		Log:        log,
+		DriverName: "sqlite3",
+	})
 	require.NoError(tb, err)
 
 	return &DataStore{
@@ -152,9 +144,9 @@ func (s *DataStore) UpdateAttestedNode(ctx context.Context, node *common.Atteste
 	return s.ds.UpdateAttestedNode(ctx, node, mask)
 }
 
-func (s *DataStore) DeleteAttestedNode(ctx context.Context, spiffeID string) (*common.AttestedNode, error) {
+func (s *DataStore) DeleteAttestedNode(ctx context.Context, spiffeID string) error {
 	if err := s.getNextError(); err != nil {
-		return nil, err
+		return err
 	}
 	return s.ds.DeleteAttestedNode(ctx, spiffeID)
 }
@@ -232,9 +224,9 @@ func (s *DataStore) UpdateRegistrationEntry(ctx context.Context, entry *common.R
 	return s.ds.UpdateRegistrationEntry(ctx, entry, mask)
 }
 
-func (s *DataStore) DeleteRegistrationEntry(ctx context.Context, entryID string) (*common.RegistrationEntry, error) {
+func (s *DataStore) DeleteRegistrationEntry(ctx context.Context, entryID string) error {
 	if err := s.getNextError(); err != nil {
-		return nil, err
+		return err
 	}
 	return s.ds.DeleteRegistrationEntry(ctx, entryID)
 }

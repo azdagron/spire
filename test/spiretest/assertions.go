@@ -43,6 +43,15 @@ func RequireGRPCStatus(tb testing.TB, err error, code codes.Code, message string
 	}
 }
 
+func AssertGRPCCode(tb testing.TB, err error, code codes.Code) bool {
+	tb.Helper()
+	st := status.Convert(err)
+	if code != st.Code() {
+		return assert.Fail(tb, fmt.Sprintf("Status code=%q does not match code=%q", st.Code(), code))
+	}
+	return true
+}
+
 func AssertGRPCStatus(tb testing.TB, err error, code codes.Code, message string) bool {
 	tb.Helper()
 	st := status.Convert(err)

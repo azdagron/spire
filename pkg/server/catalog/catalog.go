@@ -7,6 +7,7 @@ import (
 	"io"
 
 	"github.com/andres-erbsen/clock"
+	"github.com/hashicorp/hcl"
 	"github.com/sirupsen/logrus"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/spiffe/spire-plugin-sdk/pluginsdk"
@@ -21,6 +22,7 @@ import (
 	km_telemetry "github.com/spiffe/spire/pkg/common/telemetry/server/keymanager"
 	"github.com/spiffe/spire/pkg/server/cache/dscache"
 	"github.com/spiffe/spire/pkg/server/datastore"
+	"github.com/spiffe/spire/pkg/server/datastore/core"
 	ds_sql "github.com/spiffe/spire/pkg/server/datastore/sqlstore"
 	"github.com/spiffe/spire/pkg/server/hostservice/agentstore"
 	"github.com/spiffe/spire/pkg/server/hostservice/identityprovider"
@@ -132,7 +134,7 @@ func Load(ctx context.Context, config Config) (_ *Repository, err error) {
 	// directly. This allows us to bypass gRPC and get rid of response limits.
 	dataStoreConfig := config.PluginConfig[dataStoreType]
 	delete(config.PluginConfig, dataStoreType)
-	sqlDataStore, err := loadSQLDataStore(config.Log, dataStoreConfig)
+	sqlDataStore, err := loadSQLDataStore(ctx, config.Log, dataStoreConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -173,7 +175,12 @@ func Load(ctx context.Context, config Config) (_ *Repository, err error) {
 	return repo, nil
 }
 
-func loadSQLDataStore(log logrus.FieldLogger, datastoreConfig map[string]catalog.HCLPluginConfig) (*ds_sql.Plugin, error) {
+type dataStoreCloser interface {
+	datastore.DataStore
+	io.Closer
+}
+
+func loadSQLDataStore(ctx context.Context, log logrus.FieldLogger, datastoreConfig map[string]catalog.HCLPluginConfig) (dataStoreCloser, error) {
 	switch {
 	case len(datastoreConfig) == 0:
 		return nil, errors.New("expecting a DataStore plugin")
@@ -196,9 +203,24 @@ func loadSQLDataStore(log logrus.FieldLogger, datastoreConfig map[string]catalog
 		return nil, fmt.Errorf("pluggability for the DataStore is deprecated; only the built-in %q plugin is supported", ds_sql.PluginName)
 	}
 
-	ds := ds_sql.New(log.WithField(telemetry.SubsystemName, sqlConfig.Name))
-	if err := ds.Configure(sqlConfig.Data); err != nil {
-		return nil, err
+	var conf struct {
+		DatabaseType     string `hcl:"database_type" json:"database_type"`
+		ConnectionString string `hcl:"connection_string" json:"connection_string"`
 	}
-	return ds, nil
+
+	if err := hcl.Decode(&conf, sqlConfig.Data); err != nil {
+		return nil, fmt.Errorf("invalid datastore config: %w", err)
+	}
+
+	return core.New(ctx, core.Config{
+		Log:            log.WithField(telemetry.SubsystemName, sqlConfig.Name),
+		DriverName:     conf.DatabaseType,
+		DataSourceName: conf.ConnectionString,
+	})
+
+	//ds := ds_sql.New()
+	//if err := ds.Configure(sqlConfig.Data); err != nil {
+	//	return nil, err
+	//}
+	//return ds, nil
 }
