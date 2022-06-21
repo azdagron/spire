@@ -9,9 +9,9 @@ import (
 )
 
 var (
-	ErrNotFound = errors.New("record not found")
-	ErrConflict = errors.New("record conflict")
-	ErrExists   = errors.New("record already exists")
+	ErrNotFound = keyvalue.ErrNotFound
+	ErrConflict = keyvalue.ErrConflict
+	ErrExists   = keyvalue.ErrExists
 )
 
 func NewCache[C Codec[O], I Index[O, L], O Object, L any](store keyvalue.Store, kind string, index I) *Cache[C, I, O, L] {
@@ -33,6 +33,12 @@ func (c *Cache[C, I, O, L]) Kind() string {
 
 func (c *Cache[C, I, O, L]) Count() int {
 	return c.index.Count()
+}
+
+func (c *Cache[C, I, O, L]) ReadIndex(f func(i I)) {
+	c.mtx.RLock()
+	defer c.mtx.RUnlock()
+	f(c.index)
 }
 
 func (c *Cache[C, I, O, L]) Get(key string) (*Record[O], error) {

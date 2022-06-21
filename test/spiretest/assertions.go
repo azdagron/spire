@@ -152,7 +152,10 @@ func RequireProtoEqual(tb testing.TB, expected, actual proto.Message, msgAndArgs
 
 func AssertProtoEqual(tb testing.TB, expected, actual proto.Message, msgAndArgs ...interface{}) bool {
 	tb.Helper()
-	return assert.Empty(tb, cmp.Diff(expected, actual, protocmp.Transform()), msgAndArgs...)
+	if diff := cmp.Diff(expected, actual, protocmp.Transform()); diff != "" {
+		return assert.Fail(tb, "proto is not equal", "%s", diff)
+	}
+	return true
 }
 
 func RequireErrorPrefix(tb testing.TB, err error, prefix string) {

@@ -1,6 +1,8 @@
 package record
 
-import "github.com/spiffe/spire/pkg/server/datastore/core/internal/btree"
+import (
+	"github.com/spiffe/spire/pkg/server/datastore/core/internal/btree"
+)
 
 type Set[O Object] struct {
 	m btree.Map[string, *Record[O], btree.String]

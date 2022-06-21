@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"io"
 	"time"
 
@@ -34,22 +35,18 @@ func (ds *DataStore) CreateRegistrationEntry(ctx context.Context, in *common.Reg
 }
 
 func (ds *DataStore) CreateOrReturnRegistrationEntry(ctx context.Context, entry *common.RegistrationEntry) (*common.RegistrationEntry, bool, error) {
-	existing, err := ds.ListRegistrationEntries(ctx, &datastore.ListRegistrationEntriesRequest{
-		ByParentID: entry.ParentId,
-		BySpiffeID: entry.SpiffeId,
-		BySelectors: &datastore.BySelectors{
-			Selectors: entry.Selectors,
-			Match:     datastore.Exact,
-		},
+	obj := makeEntryObject(entry)
+
+	var existing *record.Record[entryObject]
+	var exists bool
+	ds.entries.ReadIndex(func(index *entryIndex) {
+		existing, exists = index.all.Get(obj.contentKey)
 	})
-	if err != nil {
-		return nil, false, err
-	}
-	if len(existing.Entries) > 0 {
-		return existing.Entries[0], true, nil
+	if exists {
+		return existing.Object.Entry, true, nil
 	}
 
-	entry, err = ds.CreateRegistrationEntry(ctx, entry)
+	entry, err := ds.CreateRegistrationEntry(ctx, entry)
 	if err != nil {
 		return nil, false, err
 	}
@@ -116,6 +113,7 @@ func (ds *DataStore) PruneRegistrationEntries(ctx context.Context, expiresBefore
 }
 
 func (ds *DataStore) UpdateRegistrationEntry(ctx context.Context, newEntry *common.RegistrationEntry, mask *common.RegistrationEntryMask) (*common.RegistrationEntry, error) {
+	fmt.Println("UPDATE", newEntry.EntryId)
 	existing, err := ds.entries.Get(newEntry.EntryId)
 	if err != nil {
 		return nil, dsErr(err, "failed to update entry")

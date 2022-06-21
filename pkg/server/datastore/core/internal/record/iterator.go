@@ -270,7 +270,7 @@ func (it *byKeyIter[C, O, F]) Release() {
 func fieldInSet[F any, C Cmp[F]](fields []F, field F) bool {
 	var cmp C
 	n := sort.Search(len(fields), func(i int) bool {
-		return cmp.Cmp(field, fields[i]) >= 0
+		return cmp.Cmp(fields[i], field) >= 0
 	})
 	return n < len(fields) && cmp.Cmp(fields[n], field) == 0
 }

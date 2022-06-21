@@ -39,7 +39,7 @@ func (ds *DataStore) FetchFederationRelationship(ctx context.Context, td spiffei
 	out, err := ds.federationRelationships.Get(td.String())
 	switch {
 	case err == nil:
-		return out.Object.FederationRelationship, nil
+		return ds.makeFederationRelationship(out.Object.FederationRelationship), nil
 	case errors.Is(err, record.ErrNotFound):
 		return nil, nil
 	default:
@@ -57,7 +57,7 @@ func (ds *DataStore) ListFederationRelationships(ctx context.Context, req *datas
 	}
 	resp.FederationRelationships = make([]*datastore.FederationRelationship, 0, len(records))
 	for _, r := range records {
-		resp.FederationRelationships = append(resp.FederationRelationships, r.Object.FederationRelationship)
+		resp.FederationRelationships = append(resp.FederationRelationships, ds.makeFederationRelationship(r.Object.FederationRelationship))
 	}
 	return resp, nil
 }
@@ -117,6 +117,14 @@ func (ds *DataStore) UpdateFederationRelationship(ctx context.Context, update *d
 	return updated.FederationRelationship, nil
 }
 
+func (ds *DataStore) makeFederationRelationship(in *datastore.FederationRelationship) *datastore.FederationRelationship {
+	fr := *in
+	if bundleRecord, err := ds.bundles.Get(in.TrustDomain.String()); err == nil {
+		fr.TrustDomainBundle = bundleRecord.Object.Bundle
+	}
+	return &fr
+}
+
 type federationRelationshipObject struct {
 	FederationRelationship *datastore.FederationRelationship
 }
@@ -128,14 +136,6 @@ func (o federationRelationshipObject) Key() string {
 	return o.FederationRelationship.TrustDomain.String()
 }
 
-func (o *federationRelationshipObject) SetObjectKey(key string) {
-	if o.FederationRelationship == nil {
-		o.FederationRelationship = &datastore.FederationRelationship{}
-	}
-	// TODO: this shouldn't be able to fail.... stash a string?
-	o.FederationRelationship.TrustDomain = spiffeid.RequireTrustDomainFromString(key)
-}
-
 type federationRelationshipData struct {
 	TrustDomain           string `json:"trust_domain"`
 	BundleEndpointURL     string `json:"bundle_endpoint_url"`
@@ -143,23 +143,15 @@ type federationRelationshipData struct {
 	EndpointSPIFFEID      string `json:"endpoint_spiffe_id"`
 }
 
-func (o *federationRelationshipObject) MarshalObject() (string, []byte, error) {
+type federationRelationshipCodec struct{}
+
+func (federationRelationshipCodec) Marshal(o *federationRelationshipObject) (string, []byte, error) {
 	data, err := json.Marshal(&federationRelationshipData{
 		TrustDomain:           o.FederationRelationship.TrustDomain.String(),
 		BundleEndpointURL:     o.FederationRelationship.BundleEndpointURL.String(),
 		BundleEndpointProfile: string(o.FederationRelationship.BundleEndpointProfile),
 		EndpointSPIFFEID:      o.FederationRelationship.EndpointSPIFFEID.String(),
 	})
-	if err != nil {
-		return "", nil, err
-	}
-	return o.Key(), data, nil
-}
-
-type federationRelationshipCodec struct{}
-
-func (federationRelationshipCodec) Marshal(o *federationRelationshipObject) (string, []byte, error) {
-	data, err := json.Marshal(o.FederationRelationship)
 	if err != nil {
 		return "", nil, err
 	}

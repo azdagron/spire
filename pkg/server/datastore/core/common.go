@@ -65,7 +65,7 @@ func getPaginationParams(p *datastore.Pagination) (string, int, error) {
 	return p.Token, int(p.PageSize), nil
 }
 
-func dsErr(err error, fmt string, args ...interface{}) error {
+func dsErr(err error, format string, args ...interface{}) error {
 	code := codes.Unknown
 	switch {
 	case errors.Is(err, record.ErrNotFound):
@@ -76,5 +76,5 @@ func dsErr(err error, fmt string, args ...interface{}) error {
 		code = codes.AlreadyExists
 	}
 	args = append(args, err)
-	return status.Errorf(code, fmt+": %v", args...)
+	return status.Errorf(code, format+": %v", args...)
 }
