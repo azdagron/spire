@@ -2,6 +2,7 @@ package catalog
 
 import (
 	"bytes"
+	"errors"
 
 	"github.com/hashicorp/hcl"
 	"github.com/hashicorp/hcl/hcl/ast"
@@ -16,6 +17,7 @@ type PluginConfig struct {
 	Args     []string
 	Checksum string
 	Data     string
+	DataPath string
 	Disabled bool
 }
 
@@ -31,6 +33,7 @@ type HCLPluginConfig struct {
 	PluginArgs     []string `hcl:"plugin_args"`
 	PluginChecksum string   `hcl:"plugin_checksum"`
 	PluginData     ast.Node `hcl:"plugin_data"`
+	PluginDataPath string   `hcl:"plugin_data_path"`
 	Enabled        *bool    `hcl:"enabled"`
 }
 
@@ -72,11 +75,13 @@ func PluginConfigsFromHCL(hclPlugins HCLPluginConfigMap) ([]PluginConfig, error)
 func PluginConfigFromHCL(pluginType, pluginName string, hclPluginConfig HCLPluginConfig) (PluginConfig, error) {
 	var data bytes.Buffer
 	if hclPluginConfig.PluginData != nil {
+		if hclPluginConfig.PluginDataPath != "" {
+			return PluginConfig{}, errors.New("plugin_data and plugin_data_path cannot both be specified")
+		}
 		if err := printer.DefaultConfig.Fprint(&data, hclPluginConfig.PluginData); err != nil {
 			return PluginConfig{}, err
 		}
 	}
-
 	return PluginConfig{
 		Name:     pluginName,
 		Type:     pluginType,
@@ -84,6 +89,7 @@ func PluginConfigFromHCL(pluginType, pluginName string, hclPluginConfig HCLPlugi
 		Args:     hclPluginConfig.PluginArgs,
 		Checksum: hclPluginConfig.PluginChecksum,
 		Data:     data.String(),
+		DataPath: hclPluginConfig.PluginDataPath,
 		Disabled: !hclPluginConfig.IsEnabled(),
 	}, nil
 }

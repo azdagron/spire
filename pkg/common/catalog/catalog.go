@@ -175,15 +175,11 @@ func Load(ctx context.Context, config Config, cat Catalog) (_ io.Closer, err err
 			return nil, fmt.Errorf("failed to bind plugin %q: %w", pluginConfig.Name, err)
 		}
 
-		switch {
-		case configurer != nil:
-			if err := configurer.Configure(ctx, config.CoreConfig, pluginConfig.Data); err != nil {
-				pluginLog.WithError(err).Error("Failed to configure plugin")
-				return nil, fmt.Errorf("failed to configure plugin %q: %w", pluginConfig.Name, err)
-			}
-		case pluginConfig.Data != "":
-			pluginLog.WithField(telemetry.Reason, "no supported configuration interface").Error("Failed to configure plugin")
-			return nil, fmt.Errorf("failed to configure plugin %q: no supported configuration interface found", pluginConfig.Name)
+		if configCloser, err := configurePlugin(ctx, configurer, config.CoreConfig, pluginConfig.Data, pluginConfig.DataPath); err == nil {
+			closers = append(closers, configCloser)
+		} else {
+			pluginLog.WithError(err).Error("Failed to configure plugin")
+			return nil, fmt.Errorf("failed to configure plugin %q: %w", pluginConfig.Name, err)
 		}
 
 		pluginLog.Info("Plugin loaded")
@@ -238,6 +234,25 @@ func initPlugin(ctx context.Context, conn grpc.ClientConnInterface, hostServices
 		hostServiceGRPCServiceNames = append(hostServiceGRPCServiceNames, hostService.GRPCServiceName())
 	}
 	return private.Init(ctx, conn, hostServiceGRPCServiceNames)
+}
+
+func configurePlugin(ctx context.Context, configurer Configurer, coreConfig CoreConfig, dataSource dataSource) (io.Closer, error) {
+	switch {
+	case pluginConfig.Data != "":
+		if configurer == nil {
+			pluginLog.WithField(telemetry.Reason, "no supported configuration interface").Error("Failed to configure plugin")
+			return nil, fmt.Errorf("failed to configure plugin %q: no supported configuration interface found", pluginConfig.Name)
+		}
+		if err := configurer.Configure(ctx, coreConfig, pluginConfig.Data); err != nil {
+			pluginLog.WithError(err).Error("Failed to configure plugin")
+			return nil, fmt.Errorf("failed to configure plugin %q: %w", pluginConfig.Name, err)
+		}
+	case pluginConfig.DataPath != "":
+		if configurer == nil {
+			pluginLog.WithField(telemetry.Reason, "no supported configuration interface").Error("Failed to configure plugin")
+			return nil, fmt.Errorf("failed to configure plugin %q: no supported configuration interface found", pluginConfig.Name)
+		}
+	}
 }
 
 type pluginInfo struct {
